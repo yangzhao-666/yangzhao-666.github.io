@@ -143,12 +143,14 @@
                             As an initial attempt, we first adapt an unsupervised MBRL agent (PEG), out-of-the-box, to a reset-free Ant locomotion task.
                             As seen in the figure, PEG, with minor modifications (reset-free PEG), outperforms prior state-of-the-art, model-free agent, IBC, tailored for the reset-free setting. 
                             On the right, we plot state visitation heatmaps of the agents, where lighter colors correspond to more visitations. 
-                            The oracle agent, with access to resets, explores the the ``task-relevant'' area between the initial and top right corner, which is ideal for training a policy that succeeds in episodic evaluation.
+                            The oracle agent, with access to resets, explores the the <b>task-relevant</b> area between the initial and top right corner, which is ideal for training a policy that succeeds in episodic evaluation.
                             In contrast, PEG exhaustively explores the entire space, as seen through its uniform heatmap.
-                            This leads us to ask: <b>how can MBRL agents acquire more task-relevant data in the reset-free setting to improve its performance?</b>
                         </p>
                 <!-- </div>-->
             </div>
+            <p class="text-justify">
+                This leads us to ask: <b>how can MBRL agents acquire more task-relevant data in the reset-free setting to improve its performance?</b>
+            </p>
         </div>
 
         <div class="row">
