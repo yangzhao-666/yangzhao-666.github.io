@@ -140,12 +140,8 @@
                     </div>
                     <!-- <div class="col-md-3"> -->
                         <p class="text-justify">
-                            As an initial attempt, we first evaluate an unsupervised MBRL agent, out-of-the-box, in a reset-free Ant locomotion task. 
-                            The ant is reset to the center of a rectangular arena, and is tasked with navigating to the upper right corner. 
-                            The agent is reset only once at the start of training. 
-                            The evaluation is episodic - the agent is reset at the start of each evaluation episode.
-                            For the MBRL agent, we use PEG \citep{hu2023planning}, which was developed to solve hard exploration tasks in the episodic setting. 
-                            As seen in the figure, PEG, out of the box, outperforms prior state-of-the-art, model-free agent, IBC, tailored for the reset-free setting. 
+                            As an initial attempt, we first adapt an unsupervised MBRL agent (PEG), out-of-the-box, to a reset-free Ant locomotion task.
+                            As seen in the figure, PEG, with minor modifications (reset-free PEG), outperforms prior state-of-the-art, model-free agent, IBC, tailored for the reset-free setting. 
                             On the right, we plot state visitation heatmaps of the agents, where lighter colors correspond to more visitations. 
                             The oracle agent, with access to resets, explores the the ``task-relevant'' area between the initial and top right corner, which is ideal for training a policy that succeeds in episodic evaluation.
                             In contrast, PEG exhaustively explores the entire space, as seen through its uniform heatmap.
