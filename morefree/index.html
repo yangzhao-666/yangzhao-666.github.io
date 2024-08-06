@@ -170,7 +170,8 @@
             </div>
             <div class="col-md-12">
                 <p class="text-justify">
-                We examine model-based backbone and MoReFree on 8 challenging reset-free tasks, ranging from locomtion to manipulation tasks.
+                We examine model-based backbone and MoReFree on 8 challenging reset-free tasks, ranging from locomtion to manipulation tasks. 
+                Two MBRL methods (MoReFree and reset-free PEG) outperform SOTA baselines (IBC, MEDAL, R3L) in 7/8 tasks, and MoReFree beats PEG in 3 more difficult tasks.
                 </p>
                     <div class="col-md-12">
                         <p>
@@ -182,29 +183,29 @@
                             <img class="img-responsive" src="img/results.png">
                         </p>
                     </div>
-                <p class="text-justify">
-                DoDont starts by collecting instruction videos of desirable (Do's) and undesirable behaviors (Don'ts). <br>
-                We then train an instruction network which assigns higher values to desirable behaviors and lower values to undesirable ones.
-                </p>
             </div>
         </div>
 
         <div class="row">
             <div class="col-md-12">
                 <h2>
-                    <span class="font-weight-normal">Objective function of DoDont</span>
+                    <span class="font-weight-normal">MoReFree: <b>Mo<\b>del-based <b>Re<\b>set-<b>Free<\b> agent</span>
                 </h2>
             </div>
             <div class="col-md-12">
+            <p>
+                <img class="img-responsive" src="img/concept.gif">
+            </p>
             <p class="text-justify">
-            <h3 class="text-center desktop-only">
-                $$\begin{aligned}
-                \text{Maximize} \ \ r(s, z, s') = \hat{p}_{\psi}(s, s')(\phi(s') - \phi(s))^\top z \quad
-                \text{s.t.} \ \ \|\phi(s) - \phi(s')\|_2 \leq 1.
-                \end{aligned}$$
-            </h3>
-            <p class="text-justify">
-                This equation represents the final objective of DoDont. Essentially, this can be interpreted as simply multiplying instruction network \(\hat{p}_{\psi}\) to the original learning objective function of METRA. For a detailed derivation, please refer to the main paper.
+            In reset-free RL, the hozion will be infinitely long. MoReFree splits the whole horizon into chuncks, each of them has length of $H_E$. Within each chunck:
+            <ul>
+                <li>
+                    Sample a goal $g$ from the goal state distribution: $g \sim \rho_g^*$, then run the goal-conditioned policy $\pi ^G$ conditioned on $g$ for 
+                </li>
+                <li>
+                    Sample a goal $g$ from the goal state distribution: $g \sim \rho_g^*$, then run the goal-conditioned policy $\pi ^G$ conditioned on $g$.
+                </li>
+            </ul>
             </p>
             </div>
         </div>
