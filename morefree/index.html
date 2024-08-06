@@ -204,32 +204,27 @@
         <div class="row">
             <div class="col-md-12">
                 <h2>
-                    <span class="font-weight-normal">Method overview</span>
+                    <span class="font-weight-normal">Results</span>
                 </h2>
             </div>
             <div class="col-md-12">
                 <p class="text-justify">
-                To address these challenges, we propose <b>DoDont</b>, a skill discovery algorithm that integrates USD objectives with intended behavioral goals. Instead of relying on a hand-designed reward, DoDont <i>learns a reward function from a small set of instruction videos</i> that demonstrate desirable and undesirable behaviors. 
-                <br><br>
-                DoDont consists of two stages.
+                We examine model-based backbone and MoReFree on 8 challenging reset-free tasks, ranging from locomtion to manipulation tasks.
                 </p>
                     <div class="col-md-12">
                         <p>
-                            <img src="img/DoDont_project_page.png" style="width:100%;">
+                            <img src="img/envs.png" style="width:100%;">
+                        </p>
+                    </div>
+                    <div class="col-md-12">
+                        <p>
+                            <img src="img/results.png" style="width:100%;">
                         </p>
                     </div>
                 <p class="text-justify">
-                <b>Stage 1. Train instruction network with instruction videos </b> <br>
                 DoDont starts by collecting instruction videos of desirable (Do's) and undesirable behaviors (Don'ts). <br>
                 We then train an instruction network which assigns higher values to desirable behaviors and lower values to undesirable ones.
                 </p>
-
-            </p>
-            <p class="text-justify">
-            <b>Stage 2. Skill learning with instruction network </b> <br>
-            We integrate the learned instructioin network into the online distance-maximizing skill discovery algorithm. <br>
-            We set the trained instruction network as the distance metric in the distance-maximizing skill discovery framework.
-            </p>
             </div>
         </div>
 
