@@ -165,6 +165,19 @@
         <div class="row">
             <div class="col-md-12">
                 <h2>
+                    <span class="font-weight-normal">MoReFree: <b Mo>del-based <b Re>set-<bFree> agent</span>
+                </h2>
+            </div>
+            <div class="col-md-12">
+            <p>
+                <img class="img-responsive" src="img/concept.gif">
+            </p>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <h2>
                     <span class="font-weight-normal">Results</span>
                 </h2>
             </div>
@@ -189,24 +202,36 @@
         <div class="row">
             <div class="col-md-12">
                 <h2>
-                    <span class="font-weight-normal">MoReFree: <b>Mo<\b>del-based <b>Re<\b>set-<b>Free<\b> agent</span>
+                    <span class="font-weight-normal">MoReFree's Behaviors</span>
                 </h2>
             </div>
             <div class="col-md-12">
-            <p>
-                <img class="img-responsive" src="img/concept.gif">
-            </p>
-            <p class="text-justify">
-            In reset-free RL, the hozion will be infinitely long. MoReFree splits the whole horizon into chuncks, each of them has length of $H_E$. Within each chunck:
-            <ul>
-                <li>
-                    Sample a goal $g$ from the goal state distribution: $g \sim \rho_g^*$, then run the goal-conditioned policy $\pi ^G$ conditioned on $g$ for 
-                </li>
-                <li>
-                    Sample a goal $g$ from the goal state distribution: $g \sim \rho_g^*$, then run the goal-conditioned policy $\pi ^G$ conditioned on $g$.
-                </li>
-            </ul>
-            </p>
+                <p class="text-justify">
+                We examine model-based backbone and MoReFree on 8 challenging reset-free tasks, ranging from locomtion to manipulation tasks. 
+                Two MBRL methods (MoReFree and reset-free PEG) outperform SOTA baselines (IBC, MEDAL, R3L) in 7/8 tasks, and MoReFree beats PEG in 3 more difficult tasks.
+                </p>
+                    <div class='vertical-align'>
+                    <div class="col-md-3">
+                        <p>
+                            <img class="img-responsive center-block" src="img/point_reset.gif">
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <p>
+                            <img class="img-responsive" src="img/table_reset.gif">
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <p>
+                            <img class="img-responsive" src="img/fetch_reset.gif">
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <p>
+                            <img class="img-responsive" src="img/fetch_wall.gif">
+                        </p>
+                    </div>
+                    </div>
             </div>
         </div>
 
