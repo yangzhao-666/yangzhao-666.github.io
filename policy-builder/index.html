@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Policy Optimization Method Builder | Zhao Yang</title>
+  <meta name="description" content="Interactive tool to compare and build policy optimization methods like GRPO, DAPO, RLOO, and more.">
+  <meta name="author" content="Zhao Yang">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Custom Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    
+    /* Subtle gradient background */
+    .gradient-bg {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+      min-height: 100vh;
+    }
+    
+    /* Card hover effects */
+    .card-hover {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Tab indicator animation */
+    .tab-active {
+      position: relative;
+    }
+    .tab-active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 3px;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      border-radius: 2px;
+    }
+    
+    /* Method badge pulse */
+    @keyframes subtle-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.8; }
+    }
+    .method-badge-new {
+      animation: subtle-pulse 2s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    const PolicyOptimizationComparison = () => {
+      // Fixed illustrative samples
+      const samples = [
+        { length: 45, reward: 1, label: 'Short ✓', oldProb: 0.15, newProb: 0.22 },
+        { length: 180, reward: 1, label: 'Long ✓', oldProb: 0.08, newProb: 0.14 },
+        { length: 95, reward: 0, label: 'Med ✗', oldProb: 0.12, newProb: 0.08 },
+        { length: 250, reward: 0, label: 'VLong ✗', oldProb: 0.05, newProb: 0.03 },
+        { length: 120, reward: 1, label: 'Med ✓', oldProb: 0.10, newProb: 0.18 },
+        { length: 200, reward: 0, label: 'Long ✗', oldProb: 0.06, newProb: 0.04 },
+      ];
+
+      // Modular component options
+      const componentOptions = {
+        baseline: [
+          { id: 'mean', label: 'Mean', formula: 'μ = Σr / K', desc: 'Simple average of rewards' },
+          { id: 'mean-loo', label: 'Leave-One-Out', formula: 'μ₋ᵢ = Σⱼ≠ᵢ rⱼ / (K-1)', desc: 'Exclude current sample' },
+          { id: 'length-weighted', label: 'Length-Weighted', formula: 'Σ(len×r) / Σlen', desc: 'Weight by response length' },
+        ],
+        stdNorm: [
+          { id: 'yes', label: 'Yes (÷ σ)', formula: '/ std(r)', desc: 'Normalize by std dev' },
+          { id: 'no', label: 'No', formula: '', desc: 'Keep raw differences' },
+        ],
+        advantageShape: [
+          { id: 'symmetric', label: 'Symmetric', formula: 'Â', desc: 'Same treatment for +/-' },
+          { id: 'skip-negative', label: 'Skip Negative', formula: 'Â if Â>0 else 0.3Â', desc: 'Dampen negative updates' },
+          { id: 'asymmetric-risk', label: 'Asymmetric Risk', formula: '0.7Â⁻ / 1.3Â⁺', desc: 'Contract neg, expand pos' },
+        ],
+        isLevel: [
+          { id: 'token', label: 'Token-Level', formula: 'ρₜ = πₜ/π_old,ₜ', desc: 'Per-token ratio' },
+          { id: 'sequence', label: 'Sequence-Level', formula: 'ρ = [π(y)/π_old(y)]^(1/|y|)', desc: 'Length-normalized sequence ratio' },
+          { id: 'group-expectation', label: 'Group Expectation', formula: 'E[ρ] ≈ 1', desc: 'Smoothed across group' },
+          { id: 'none', label: 'None (On-Policy)', formula: 'ρ = 1', desc: 'Strict on-policy, no IS' },
+        ],
+        isClipping: [
+          { id: 'symmetric', label: 'Symmetric', formula: 'clip(ρ, 1±ε)', desc: 'Same clip both sides' },
+          { id: 'asymmetric', label: 'Asymmetric (Higher)', formula: 'clip(ρ, 1-ε, 1+ε\')', desc: 'Higher upper bound' },
+          { id: 'none', label: 'None', formula: 'ρ', desc: 'No clipping' },
+        ],
+        lossAgg: [
+          { id: 'sample-mean', label: 'Sample-Mean', formula: 'Σᵢ(Σₜ/|yᵢ|) / K', desc: 'Avg tokens, then avg samples' },
+          { id: 'token-mean', label: 'Token-Mean', formula: 'Σᵢ Σₜ / Σ|yᵢ|', desc: 'Sum all, ÷ total tokens' },
+          { id: 'global-const', label: 'Global Constant', formula: 'Σᵢ Σₜ / (L_max × K)', desc: 'Divide by constant' },
+          { id: 'geometric', label: 'Geometric Mean', formula: '(∏|loss|)^(1/T)', desc: 'Geometric aggregation' },
+        ],
+      };
+
+      // Known method configurations
+      const knownMethods = {
+        'GRPO': { baseline: 'mean', stdNorm: 'yes', advantageShape: 'symmetric', isLevel: 'token', isClipping: 'symmetric', lossAgg: 'sample-mean' },
+        'Dr.GRPO': { baseline: 'mean', stdNorm: 'no', advantageShape: 'symmetric', isLevel: 'token', isClipping: 'symmetric', lossAgg: 'global-const' },
+        'OPO': { baseline: 'length-weighted', stdNorm: 'no', advantageShape: 'symmetric', isLevel: 'none', isClipping: 'none', lossAgg: 'token-mean' },
+        'RLOO': { baseline: 'mean-loo', stdNorm: 'no', advantageShape: 'symmetric', isLevel: 'token', isClipping: 'symmetric', lossAgg: 'sample-mean' },
+        'DAPO': { baseline: 'mean', stdNorm: 'yes', advantageShape: 'symmetric', isLevel: 'token', isClipping: 'asymmetric', lossAgg: 'token-mean' },
+        'GSPO': { baseline: 'mean', stdNorm: 'yes', advantageShape: 'symmetric', isLevel: 'sequence', isClipping: 'symmetric', lossAgg: 'sample-mean' },
+        'GEPO': { baseline: 'mean', stdNorm: 'no', advantageShape: 'symmetric', isLevel: 'group-expectation', isClipping: 'none', lossAgg: 'sample-mean' },
+        'GTPO': { baseline: 'mean', stdNorm: 'no', advantageShape: 'skip-negative', isLevel: 'token', isClipping: 'symmetric', lossAgg: 'sample-mean' },
+        'DVPO': { baseline: 'mean', stdNorm: 'no', advantageShape: 'asymmetric-risk', isLevel: 'token', isClipping: 'symmetric', lossAgg: 'sample-mean' },
+        'GMPO': { baseline: 'mean', stdNorm: 'yes', advantageShape: 'symmetric', isLevel: 'token', isClipping: 'symmetric', lossAgg: 'geometric' },
+      };
+
+      const methodColors = {
+        'GRPO': '#3b82f6', 'Dr.GRPO': '#8b5cf6', 'OPO': '#10b981', 'RLOO': '#f59e0b',
+        'DAPO': '#ef4444', 'GSPO': '#06b6d4', 'GEPO': '#84cc16', 'GTPO': '#f97316',
+        'DVPO': '#ec4899', 'GMPO': '#a855f7'
+      };
+
+      // User selections for modular builder
+      const [selections, setSelections] = useState({
+        baseline: 'mean',
+        stdNorm: 'yes',
+        advantageShape: 'symmetric',
+        isLevel: 'token',
+        isClipping: 'symmetric',
+        lossAgg: 'sample-mean',
+      });
+
+      const [selectedMethods, setSelectedMethods] = useState(['GRPO', 'Dr.GRPO', 'DAPO', 'GSPO']);
+      const [showFormulas, setShowFormulas] = useState(true);
+      const [activeTab, setActiveTab] = useState('builder');
+
+      // Find matching method for current selections
+      const matchingMethod = useMemo(() => {
+        for (const [method, config] of Object.entries(knownMethods)) {
+          if (Object.keys(config).every(key => config[key] === selections[key])) {
+            return method;
+          }
+        }
+        return null;
+      }, [selections]);
+
+      // Calculate values based on selections
+      const calculations = useMemo(() => {
+        const rewards = samples.map(s => s.reward);
+        const lengths = samples.map(s => s.length);
+        const K = samples.length;
+        const totalTokens = lengths.reduce((a, b) => a + b, 0);
+        const maxLen = Math.max(...lengths);
+        const meanReward = rewards.reduce((a, b) => a + b, 0) / K;
+        const stdReward = Math.sqrt(rewards.reduce((sum, r) => sum + Math.pow(r - meanReward, 2), 0) / K) || 0.001;
+
+        const compute = (config) => {
+          // Baseline
+          let baseline;
+          if (config.baseline === 'mean') baseline = meanReward;
+          else if (config.baseline === 'mean-loo') baseline = meanReward;
+          else if (config.baseline === 'length-weighted') {
+            baseline = samples.reduce((sum, s) => sum + s.length * s.reward, 0) / totalTokens;
+          }
+
+          // Advantages
+          let advantages = rewards.map(r => r - baseline);
+          if (config.stdNorm === 'yes') {
+            advantages = advantages.map(a => a / stdReward);
+          }
+          if (config.advantageShape === 'skip-negative') {
+            advantages = advantages.map(a => a < 0 ? a * 0.3 : a * 1.2);
+          } else if (config.advantageShape === 'asymmetric-risk') {
+            advantages = advantages.map(a => a < 0 ? a * 0.7 : a * 1.3);
+          }
+
+          // IS Ratios
+          let isRatios;
+          const clip = (r, lo = 0.8, hi = 1.2) => Math.min(Math.max(r, lo), hi);
+          const tokenRatios = samples.map(s => s.newProb / s.oldProb);
+          
+          if (config.isLevel === 'token') {
+            isRatios = tokenRatios;
+          } else if (config.isLevel === 'sequence') {
+            isRatios = samples.map(s => {
+              const logRatio = Math.log(s.newProb / s.oldProb);
+              return Math.exp(logRatio / Math.sqrt(s.length / 100));
+            });
+          } else if (config.isLevel === 'group-expectation') {
+            isRatios = samples.map(() => 1.0);
+          } else {
+            isRatios = samples.map(() => 1.0);
+          }
+
+          // Clipping
+          if (config.isClipping === 'symmetric') {
+            isRatios = isRatios.map(r => clip(r, 0.8, 1.2));
+          } else if (config.isClipping === 'asymmetric') {
+            isRatios = isRatios.map(r => clip(r, 0.8, 1.28));
+          }
+
+          // Token losses
+          const tokenLosses = samples.map((s, i) => ({
+            perToken: advantages[i] * isRatios[i],
+            totalForSeq: advantages[i] * isRatios[i] * s.length,
+            length: s.length
+          }));
+
+          // Loss aggregation
+          let finalLoss;
+          if (config.lossAgg === 'sample-mean') {
+            finalLoss = tokenLosses.reduce((sum, t) => sum + t.perToken, 0) / K;
+          } else if (config.lossAgg === 'token-mean') {
+            finalLoss = tokenLosses.reduce((sum, t) => sum + t.totalForSeq, 0) / totalTokens;
+          } else if (config.lossAgg === 'global-const') {
+            finalLoss = tokenLosses.reduce((sum, t) => sum + t.totalForSeq, 0) / (maxLen * K);
+          } else if (config.lossAgg === 'geometric') {
+            const product = tokenLosses.reduce((prod, t) => prod * Math.abs(t.perToken + 0.001), 1);
+            finalLoss = Math.sign(tokenLosses[0].perToken) * Math.pow(product, 1 / K);
+          }
+
+          return { baseline, advantages, isRatios, tokenLosses, finalLoss };
+        };
+
+        // Compute for user selection
+        const userCalc = compute(selections);
+
+        // Compute for all known methods
+        const methodCalcs = {};
+        for (const [method, config] of Object.entries(knownMethods)) {
+          methodCalcs[method] = { ...compute(config), config };
+        }
+
+        return { user: userCalc, methods: methodCalcs };
+      }, [selections, samples]);
+
+      const toggleMethod = (method) => {
+        setSelectedMethods(prev =>
+          prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
+        );
+      };
+
+      const ComponentSelector = ({ componentKey, label, options }) => (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 card-hover">
+          <div className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wider">{label}</div>
+          <div className="space-y-2">
+            {options.map(opt => {
+              const isSelected = selections[componentKey] === opt.id;
+              const methodsUsing = Object.entries(knownMethods)
+                .filter(([_, config]) => config[componentKey] === opt.id)
+                .map(([name]) => name);
+
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setSelections(prev => ({ ...prev, [componentKey]: opt.id }))}
+                  className={`w-full text-left p-3 rounded-lg transition-all ${
+                    isSelected
+                      ? 'bg-indigo-50 border-2 border-indigo-400 shadow-sm'
+                      : 'bg-slate-50 border-2 border-transparent hover:bg-slate-100 hover:border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`font-semibold text-sm ${isSelected ? 'text-indigo-700' : 'text-slate-700'}`}>
+                      {opt.label}
+                    </span>
+                    {isSelected && <span className="text-indigo-500 text-lg">✓</span>}
+                  </div>
+                  <div className="font-mono text-xs text-slate-500 mt-1">{opt.formula}</div>
+                  <div className="text-xs text-slate-400 mt-1">{opt.desc}</div>
+                  {methodsUsing.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {methodsUsing.map(m => (
+                        <span
+                          key={m}
+                          className="text-[9px] px-1.5 py-0.5 rounded-full text-white font-semibold"
+                          style={{ backgroundColor: methodColors[m] }}
+                        >
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+
+      const ResultPreview = () => {
+        const { user } = calculations;
+        return (
+          <div className="bg-white rounded-xl shadow-lg p-5 border-2 border-indigo-200">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <span className="font-bold text-lg text-slate-800">Your Configuration</span>
+                {matchingMethod ? (
+                  <span
+                    className="ml-2 px-3 py-1 rounded-full text-white text-sm font-bold shadow-sm"
+                    style={{ backgroundColor: methodColors[matchingMethod] }}
+                  >
+                    = {matchingMethod}
+                  </span>
+                ) : (
+                  <span className="ml-2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold shadow-sm method-badge-new">
+                    🆕 Novel!
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {!matchingMethod && (
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4 mb-4">
+                <div className="text-sm font-semibold text-purple-800">
+                  ⚡ This combination hasn't been tried in published work!
+                </div>
+                <div className="text-xs text-purple-600 mt-1">
+                  You've discovered a novel configuration. It might be worth exploring!
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b-2 border-slate-200">
+                    <th className="text-left py-2 px-2 text-slate-500">Sample</th>
+                    <th className="text-center py-2 px-2 text-slate-500">Len</th>
+                    <th className="text-center py-2 px-2 text-slate-500">Reward</th>
+                    <th className="text-center py-2 px-2 text-slate-500">Advantage</th>
+                    <th className="text-center py-2 px-2 text-slate-500">IS Ratio</th>
+                    <th className="text-center py-2 px-2 text-slate-500">Token Loss</th>
+                    <th className="text-center py-2 px-2 text-slate-500">× Len</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {samples.map((s, i) => (
+                    <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="py-2 px-2">
+                        <span className={`font-medium ${s.reward === 1 ? 'text-emerald-600' : 'text-red-500'}`}>{s.label}</span>
+                      </td>
+                      <td className="text-center py-2 px-2 text-slate-400">{s.length}</td>
+                      <td className="text-center py-2 px-2 font-semibold">{s.reward}</td>
+                      <td className="text-center py-2 px-2 font-mono">
+                        <span className={user.advantages[i] >= 0 ? 'text-emerald-600' : 'text-red-500'}>
+                          {user.advantages[i] >= 0 ? '+' : ''}{user.advantages[i].toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="text-center py-2 px-2 font-mono text-slate-600">{user.isRatios[i].toFixed(3)}</td>
+                      <td className="text-center py-2 px-2 font-mono">
+                        <span className={user.tokenLosses[i].perToken >= 0 ? 'text-emerald-600' : 'text-red-500'}>
+                          {user.tokenLosses[i].perToken >= 0 ? '+' : ''}{user.tokenLosses[i].perToken.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="text-center py-2 px-2 font-mono font-bold">
+                        <span className={user.tokenLosses[i].totalForSeq >= 0 ? 'text-emerald-600' : 'text-red-500'}>
+                          {user.tokenLosses[i].totalForSeq >= 0 ? '+' : ''}{user.tokenLosses[i].totalForSeq.toFixed(0)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-50">
+                    <td colSpan={6} className="text-right py-3 px-2 font-semibold text-slate-600">Final Aggregated Loss:</td>
+                    <td className="text-center py-3 px-2 font-mono font-bold text-xl text-indigo-600">
+                      {user.finalLoss >= 0 ? '+' : ''}{user.finalLoss.toFixed(4)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        );
+      };
+
+      const MethodComparisonCard = ({ method }) => {
+        const data = calculations.methods[method];
+        const config = knownMethods[method];
+
+        return (
+          <div className="bg-white rounded-xl shadow-md p-4 border-l-4 card-hover" style={{ borderLeftColor: methodColors[method] }}>
+            <div className="font-bold text-base mb-3" style={{ color: methodColors[method] }}>{method}</div>
+
+            {showFormulas && (
+              <div className="grid grid-cols-3 gap-1.5 mb-3 text-[10px]">
+                <div className="bg-blue-50 rounded-lg p-2">
+                  <div className="text-blue-400 font-semibold uppercase tracking-wide">Adv</div>
+                  <div className="font-mono text-blue-700 mt-0.5">
+                    {config.baseline === 'length-weighted' ? 'len-wt' : config.baseline === 'mean-loo' ? 'LOO' : 'mean'}
+                    {config.stdNorm === 'yes' ? ' /σ' : ''}
+                  </div>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-2">
+                  <div className="text-emerald-400 font-semibold uppercase tracking-wide">IS</div>
+                  <div className="font-mono text-emerald-700 mt-0.5">{config.isLevel}</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-2">
+                  <div className="text-purple-400 font-semibold uppercase tracking-wide">Agg</div>
+                  <div className="font-mono text-purple-700 mt-0.5">{config.lossAgg.split('-')[0]}</div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1 text-[10px]">
+              {samples.map((s, i) => (
+                <div key={i} className="flex items-center gap-1.5 py-0.5">
+                  <span className={`w-14 font-medium ${s.reward === 1 ? 'text-emerald-600' : 'text-red-500'}`}>{s.label}</span>
+                  <span className="w-8 text-slate-400">{s.length}</span>
+                  <span className={`flex-1 font-mono ${data.advantages[i] >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {data.advantages[i] >= 0 ? '+' : ''}{data.advantages[i].toFixed(2)}
+                  </span>
+                  <span className="w-10 font-mono text-slate-500">{data.isRatios[i].toFixed(2)}</span>
+                  <span className={`w-14 font-mono font-bold text-right ${data.tokenLosses[i].perToken >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {data.tokenLosses[i].perToken >= 0 ? '+' : ''}{data.tokenLosses[i].perToken.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+              <span className="text-[11px] text-slate-400 font-medium">Final Loss:</span>
+              <span className="font-mono font-bold text-lg" style={{ color: methodColors[method] }}>
+                {data.finalLoss >= 0 ? '+' : ''}{data.finalLoss.toFixed(4)}
+              </span>
+            </div>
+          </div>
+        );
+      };
+
+      const FullComparisonTable = () => (
+        <div className="bg-white rounded-xl shadow-lg p-5 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b-2 border-slate-200">
+                <th className="text-left py-3 px-2 text-slate-600 font-bold">Method</th>
+                <th className="text-center py-3 px-2 bg-blue-50 text-blue-600 font-semibold">Baseline</th>
+                <th className="text-center py-3 px-2 bg-blue-50 text-blue-600 font-semibold">Std Norm</th>
+                <th className="text-center py-3 px-2 bg-blue-50 text-blue-600 font-semibold">Adv Shape</th>
+                <th className="text-center py-3 px-2 bg-emerald-50 text-emerald-600 font-semibold">IS Level</th>
+                <th className="text-center py-3 px-2 bg-emerald-50 text-emerald-600 font-semibold">IS Clip</th>
+                <th className="text-center py-3 px-2 bg-purple-50 text-purple-600 font-semibold">Loss Agg</th>
+                <th className="text-center py-3 px-2 text-slate-600 font-bold">Final Loss</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(knownMethods).map(([method, config]) => {
+                const data = calculations.methods[method];
+                return (
+                  <tr key={method} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td className="py-3 px-2 font-bold" style={{ color: methodColors[method] }}>{method}</td>
+                    <td className="text-center py-3 px-2 text-slate-600">{config.baseline}</td>
+                    <td className="text-center py-3 px-2">{config.stdNorm === 'yes' ? <span className="text-emerald-500">✓</span> : <span className="text-slate-300">✗</span>}</td>
+                    <td className="text-center py-3 px-2 text-slate-600">{config.advantageShape}</td>
+                    <td className="text-center py-3 px-2 text-slate-600">{config.isLevel}</td>
+                    <td className="text-center py-3 px-2 text-slate-600">{config.isClipping}</td>
+                    <td className="text-center py-3 px-2 text-slate-600">{config.lossAgg}</td>
+                    <td className="text-center py-3 px-2 font-mono font-bold text-sm" style={{ color: methodColors[method] }}>
+                      {data.finalLoss.toFixed(4)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+
+      return (
+        <div className="gradient-bg p-4 md:p-6 max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-3xl">🔧</span>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800">Policy Optimization Method Builder</h1>
+            </div>
+            <p className="text-slate-500 text-sm md:text-base">
+              Mix and match components to understand existing methods or discover new combinations
+            </p>
+            <p className="text-slate-400 text-xs mt-1">
+              By <a href="https://yangzhao-666.github.io" className="text-indigo-500 hover:underline">Zhao Yang</a>
+            </p>
+          </div>
+
+          {/* Tab Selector */}
+          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+            {[
+              { id: 'builder', label: '🔧 Build Your Own' },
+              { id: 'comparison', label: '📊 Compare Methods' },
+              { id: 'table', label: '📋 Full Table' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 shadow-md border border-slate-100'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'builder' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Component Selectors */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl p-3 text-sm font-semibold shadow-md">
+                  📐 Advantage Calculation
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <ComponentSelector componentKey="baseline" label="Baseline" options={componentOptions.baseline} />
+                  <ComponentSelector componentKey="stdNorm" label="Std Normalization" options={componentOptions.stdNorm} />
+                  <ComponentSelector componentKey="advantageShape" label="Advantage Shape" options={componentOptions.advantageShape} />
+                </div>
+
+                <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-3 text-sm font-semibold shadow-md">
+                  ⚖️ Importance Sampling
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ComponentSelector componentKey="isLevel" label="IS Level" options={componentOptions.isLevel} />
+                  <ComponentSelector componentKey="isClipping" label="IS Clipping" options={componentOptions.isClipping} />
+                </div>
+
+                <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl p-3 text-sm font-semibold shadow-md">
+                  📦 Loss Aggregation
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  <ComponentSelector componentKey="lossAgg" label="Aggregation Method" options={componentOptions.lossAgg} />
+                </div>
+              </div>
+
+              {/* Result Preview */}
+              <div className="lg:col-span-1">
+                <ResultPreview />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'comparison' && (
+            <>
+              {/* Method Selector */}
+              <div className="bg-white rounded-xl shadow-md p-4 mb-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Compare:</span>
+                  {Object.keys(knownMethods).map(method => (
+                    <button
+                      key={method}
+                      onClick={() => toggleMethod(method)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        selectedMethods.includes(method)
+                          ? 'text-white shadow-md'
+                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      }`}
+                      style={{
+                        backgroundColor: selectedMethods.includes(method) ? methodColors[method] : undefined
+                      }}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                  <label className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+                    <input
+                      type="checkbox"
+                      checked={showFormulas}
+                      onChange={(e) => setShowFormulas(e.target.checked)}
+                      className="rounded w-4 h-4 text-indigo-600"
+                    />
+                    Show config
+                  </label>
+                </div>
+              </div>
+
+              {/* Sample Legend */}
+              <div className="bg-white rounded-xl shadow-md p-3 mb-5">
+                <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mb-2">Samples:</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                  {samples.map((s, i) => (
+                    <span key={i} className={s.reward === 1 ? 'text-emerald-600' : 'text-red-500'}>
+                      {s.label} <span className="text-slate-400">(len={s.length}, π:{s.oldProb}→{s.newProb})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Method Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {selectedMethods.map(method => (
+                  <MethodComparisonCard key={method} method={method} />
+                ))}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'table' && <FullComparisonTable />}
+
+          {/* Legend */}
+          <div className="mt-8 bg-white rounded-xl shadow-lg p-5">
+            <h3 className="font-bold text-slate-800 mb-4 text-lg">📚 Component Reference</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+              <div>
+                <div className="font-bold text-blue-600 mb-2">Advantage Components</div>
+                <ul className="space-y-1.5 text-slate-600">
+                  <li><strong className="text-slate-700">Baseline:</strong> What to subtract from reward</li>
+                  <li><strong className="text-slate-700">Std Norm:</strong> Divide by σ (compresses differences)</li>
+                  <li><strong className="text-slate-700">Shape:</strong> Symmetric vs asymmetric treatment</li>
+                </ul>
+              </div>
+              <div>
+                <div className="font-bold text-emerald-600 mb-2">IS Components</div>
+                <ul className="space-y-1.5 text-slate-600">
+                  <li><strong className="text-slate-700">Level:</strong> Token vs sequence vs group</li>
+                  <li><strong className="text-slate-700">Clipping:</strong> Bound the ratio to prevent instability</li>
+                </ul>
+              </div>
+              <div>
+                <div className="font-bold text-purple-600 mb-2">Loss Aggregation</div>
+                <ul className="space-y-1.5 text-slate-600">
+                  <li><strong className="text-slate-700">Sample-mean:</strong> GRPO default (has length bias)</li>
+                  <li><strong className="text-slate-700">Token-mean:</strong> DAPO fix (fair to long sequences)</li>
+                  <li><strong className="text-slate-700">Global-const:</strong> Dr.GRPO fix (no length norm)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          
+          {/* Footer */}
+          <div className="mt-6 text-center text-xs text-slate-400">
+            <a href="https://yangzhao-666.github.io" className="hover:text-indigo-500 transition-colors">← Back to Zhao Yang's Homepage</a>
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<PolicyOptimizationComparison />);
+  </script>
+</body>
+</html>
